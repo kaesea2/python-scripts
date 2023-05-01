@@ -14,7 +14,6 @@ cat your_dump.sql | docker exec -i your-db-container psql -U your-db-user -d you
 to restore a compressed sql:
 gunzip < your_dump.sql.gz | docker exec -i your-db-container psql -U your-db-user -d your-db-name
 
-
 -----LOCAL USER ENUMERATION-----
 echo %USERNAME% || whoami
 $env:username  (ps)
